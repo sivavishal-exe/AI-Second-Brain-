@@ -1,0 +1,448 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { useBrain } from '../context/BrainContext';
+import { Maximize2, Minimize2, ZoomIn, ZoomOut, Zap } from 'lucide-react';
+
+export default function GraphView() {
+  const { notes, edges, selectedNoteId, setSelectedNoteId } = useBrain();
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [draggedNode, setDraggedNode] = useState(null);
+  const [hoveredNode, setHoveredNode] = useState(null);
+
+  // Maintain local mutable physics positions so we don't cause React re-render loops
+  const nodesRef = useRef([]);
+  const dragStart = useRef({ x: 0, y: 0 });
+  const isPanning = useRef(false);
+  const panStart = useRef({ x: 0, y: 0 });
+
+  // Sync React context nodes with physics nodes
+  useEffect(() => {
+    const existingNodes = nodesRef.current;
+    
+    // Build new nodes list keeping positions of old ones if they still exist
+    nodesRef.current = notes.map(note => {
+      const existing = existingNodes.find(n => n.id === note.id);
+      if (existing) {
+        // Keep positions
+        return {
+          ...existing,
+          title: note.title,
+          type: note.type,
+        };
+      } else {
+        // Initialize position near center
+        const width = canvasRef.current ? canvasRef.current.width : 600;
+        const height = canvasRef.current ? canvasRef.current.height : 400;
+        return {
+          id: note.id,
+          title: note.title,
+          type: note.type,
+          x: width / 2 + (Math.random() - 0.5) * 150,
+          y: height / 2 + (Math.random() - 0.5) * 150,
+          vx: 0,
+          vy: 0,
+          radius: note.id === selectedNoteId ? 22 : 16,
+        };
+      }
+    });
+  }, [notes, selectedNoteId]);
+
+  // Physics and Render Loop
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+
+    const updatePhysics = () => {
+      const pNodes = nodesRef.current;
+      const kRepulsion = 400; // Repulsion force strength
+      const kAttraction = 0.04; // Spring attraction strength
+      const damping = 0.85; // Drag friction
+      const centerGravity = 0.015; // Pull nodes to center
+      const idealLength = 120; // Edge spring rest length
+
+      const width = canvas.width;
+      const height = canvas.height;
+      const cx = width / 2;
+      const cy = height / 2;
+
+      // 1. Repulsion between all node pairs
+      for (let i = 0; i < pNodes.length; i++) {
+        const n1 = pNodes[i];
+        for (let j = i + 1; j < pNodes.length; j++) {
+          const n2 = pNodes[j];
+          const dx = n2.x - n1.x;
+          const dy = n2.y - n1.y;
+          const distSq = dx * dx + dy * dy + 0.1;
+          const dist = Math.sqrt(distSq);
+          
+          if (dist < 400) {
+            const force = kRepulsion / distSq;
+            const fx = (dx / dist) * force;
+            const fy = (dy / dist) * force;
+            
+            if (n1 !== draggedNode) {
+              n1.vx -= fx;
+              n1.vy -= fy;
+            }
+            if (n2 !== draggedNode) {
+              n2.vx += fx;
+              n2.vy += fy;
+            }
+          }
+        }
+      }
+
+      // 2. Attraction along edges
+      edges.forEach(edge => {
+        const n1 = pNodes.find(n => n.id === edge.source);
+        const n2 = pNodes.find(n => n.id === edge.target);
+        if (!n1 || !n2) return;
+
+        const dx = n2.x - n1.x;
+        const dy = n2.y - n1.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.1;
+        
+        // Hooke's Law spring force
+        const force = (dist - idealLength) * kAttraction * edge.weight;
+        const fx = (dx / dist) * force;
+        const fy = (dy / dist) * force;
+
+        if (n1 !== draggedNode) {
+          n1.vx += fx;
+          n1.vy += fy;
+        }
+        if (n2 !== draggedNode) {
+          n2.vx -= fx;
+          n2.vy -= fy;
+        }
+      });
+
+      // 3. Center gravity and update positions
+      pNodes.forEach(node => {
+        if (node === draggedNode) return;
+
+        // Pull to center
+        node.vx += (cx - node.x) * centerGravity;
+        node.vy += (cy - node.y) * centerGravity;
+
+        node.x += node.vx;
+        node.y += node.vy;
+
+        node.vx *= damping;
+        node.vy *= damping;
+
+        // Wall collisions
+        const margin = 30;
+        if (node.x < margin) { node.x = margin; node.vx = 0; }
+        if (node.x > width - margin) { node.x = width - margin; node.vx = 0; }
+        if (node.y < margin) { node.y = margin; node.vy = 0; }
+        if (node.y > height - margin) { node.y = height - margin; node.vy = 0; }
+      });
+    };
+
+    const drawGraph = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.save();
+      // Apply pan & zoom
+      ctx.translate(pan.x, pan.y);
+      ctx.scale(zoom, zoom);
+
+      // Draw connection lines
+      edges.forEach(edge => {
+        const sourceNode = nodesRef.current.find(n => n.id === edge.source);
+        const targetNode = nodesRef.current.find(n => n.id === edge.target);
+        if (!sourceNode || !targetNode) return;
+
+        const isRelatedToSelected = sourceNode.id === selectedNoteId || targetNode.id === selectedNoteId;
+
+        ctx.beginPath();
+        ctx.moveTo(sourceNode.x, sourceNode.y);
+        ctx.lineTo(targetNode.x, targetNode.y);
+        
+        if (isRelatedToSelected) {
+          ctx.strokeStyle = 'rgba(168, 85, 247, 0.4)';
+          ctx.lineWidth = 2.5;
+        } else {
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+          ctx.lineWidth = 1;
+        }
+        ctx.stroke();
+
+        // Animated relationship signal particles
+        if (isRelatedToSelected) {
+          const time = Date.now() * 0.002;
+          const ratio = (time % 1);
+          const px = sourceNode.x + (targetNode.x - sourceNode.x) * ratio;
+          const py = sourceNode.y + (targetNode.y - sourceNode.y) * ratio;
+
+          ctx.beginPath();
+          ctx.arc(px, py, 3, 0, Math.PI * 2);
+          ctx.fillStyle = '#06b6d4';
+          ctx.shadowBlur = 8;
+          ctx.shadowColor = '#06b6d4';
+          ctx.fill();
+          ctx.shadowBlur = 0; // reset shadow
+        }
+      });
+
+      // Draw Nodes
+      nodesRef.current.forEach(node => {
+        const isSelected = node.id === selectedNoteId;
+        const isHovered = hoveredNode && node.id === hoveredNode.id;
+        
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, isSelected ? 20 : 15, 0, Math.PI * 2);
+        
+        // Define colors based on node type
+        let primaryColor = '#a855f7'; // note
+        let glowColor = 'rgba(168, 85, 247, 0.5)';
+        
+        if (node.type === 'url') {
+          primaryColor = '#eab308'; // bookmark (yellow)
+          glowColor = 'rgba(234, 179, 8, 0.5)';
+        } else if (node.type === 'file') {
+          primaryColor = '#06b6d4'; // document file (cyan)
+          glowColor = 'rgba(6, 182, 212, 0.5)';
+        } else if (node.type === 'task') {
+          primaryColor = '#10b981'; // actionable task (green)
+          glowColor = 'rgba(16, 185, 129, 0.5)';
+        }
+
+        ctx.shadowBlur = isSelected ? 20 : (isHovered ? 12 : 5);
+        ctx.shadowColor = primaryColor;
+        ctx.fillStyle = isSelected ? primaryColor : 'rgba(13, 17, 33, 0.9)';
+        ctx.fill();
+
+        ctx.strokeStyle = isSelected ? '#ffffff' : primaryColor;
+        ctx.lineWidth = isSelected ? 3 : 2;
+        ctx.stroke();
+        ctx.shadowBlur = 0; // Reset shadow
+
+        // Render type icon symbol inside note circles
+        ctx.fillStyle = isSelected ? '#000000' : '#ffffff';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        let label = 'N';
+        if (node.type === 'url') label = '🔗';
+        else if (node.type === 'file') label = '📄';
+        else if (node.type === 'task') label = '✓';
+        
+        ctx.fillText(label, node.x, node.y);
+
+        // Draw note titles below the nodes
+        ctx.fillStyle = isSelected ? '#ffffff' : '#94a3b8';
+        ctx.font = isSelected ? 'bold 11px system-ui' : '10px system-ui';
+        ctx.fillText(
+          node.title.length > 15 ? node.title.substring(0, 15) + '...' : node.title,
+          node.x,
+          node.y + 28
+        );
+        
+        ctx.restore();
+      });
+
+      ctx.restore();
+    };
+
+    const runLoop = () => {
+      updatePhysics();
+      drawGraph();
+      animationFrameId = requestAnimationFrame(runLoop);
+    };
+
+    runLoop();
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [edges, selectedNoteId, hoveredNode, zoom, pan, draggedNode]);
+
+  // Adjust canvas size
+  useEffect(() => {
+    const handleResize = () => {
+      const canvas = canvasRef.current;
+      const container = containerRef.current;
+      if (!canvas || !container) return;
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isFullscreen]);
+
+  // Event handlers
+  const handleMouseDown = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left - pan.x) / zoom;
+    const mouseY = (e.clientY - rect.top - pan.y) / zoom;
+
+    // Check if clicked a node
+    const clickedNode = nodesRef.current.find(node => {
+      const dx = node.x - mouseX;
+      const dy = node.y - mouseY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      return dist <= 25; // hit-target radius
+    });
+
+    if (clickedNode) {
+      setDraggedNode(clickedNode);
+      setSelectedNoteId(clickedNode.id);
+      dragStart.current = { x: mouseX - clickedNode.x, y: mouseY - clickedNode.y };
+    } else {
+      isPanning.current = true;
+      panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left - pan.x) / zoom;
+    const mouseY = (e.clientY - rect.top - pan.y) / zoom;
+
+    if (draggedNode) {
+      draggedNode.x = mouseX - dragStart.current.x;
+      draggedNode.y = mouseY - dragStart.current.y;
+      draggedNode.vx = 0;
+      draggedNode.vy = 0;
+    } else if (isPanning.current) {
+      setPan({
+        x: e.clientX - panStart.current.x,
+        y: e.clientY - panStart.current.y
+      });
+    } else {
+      // Find hovered node
+      const hovered = nodesRef.current.find(node => {
+        const dx = node.x - mouseX;
+        const dy = node.y - mouseY;
+        return Math.sqrt(dx * dx + dy * dy) <= 22;
+      });
+      setHoveredNode(hovered || null);
+    }
+  };
+
+  const handleMouseUp = () => {
+    setDraggedNode(null);
+    isPanning.current = false;
+  };
+
+  const handleZoom = (factor) => {
+    setZoom(prev => Math.max(0.5, Math.min(3, prev * factor)));
+  };
+
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
+  };
+
+  return (
+    <div 
+      ref={containerRef} 
+      className={`glass-panel flex-col ${isFullscreen ? 'fixed inset-0 z-50 w-screen h-screen' : 'relative w-full h-full'}`}
+      style={{ 
+        height: isFullscreen ? '100vh' : '100%', 
+        width: isFullscreen ? '100vw' : '100%', 
+        overflow: 'hidden',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        position: 'relative'
+      }}
+    >
+      <div 
+        className="flex-row justify-between align-center" 
+        style={{ 
+          padding: '12px 16px', 
+          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          background: 'rgba(10, 12, 22, 0.6)',
+          zIndex: 10
+        }}
+      >
+        <div className="flex-row align-center gap-8">
+          <Zap size={16} color="#a855f7" className="glow-purple" />
+          <span style={{ fontWeight: 600, fontSize: '14px', letterSpacing: '0.5px' }}>
+            EPISTEMIC KNOWLEDGE MAP
+          </span>
+        </div>
+        
+        <div className="flex-row gap-8">
+          <button 
+            onClick={() => handleZoom(1.15)}
+            className="flex-row align-center justify-between"
+            style={{ 
+              background: 'rgba(255, 255, 255, 0.05)', 
+              border: '1px solid rgba(255, 255, 255, 0.08)', 
+              color: '#fff', 
+              padding: '6px', 
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            <ZoomIn size={14} />
+          </button>
+          <button 
+            onClick={() => handleZoom(0.85)}
+            style={{ 
+              background: 'rgba(255, 255, 255, 0.05)', 
+              border: '1px solid rgba(255, 255, 255, 0.08)', 
+              color: '#fff', 
+              padding: '6px', 
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            <ZoomOut size={14} />
+          </button>
+          <button 
+            onClick={toggleFullscreen}
+            style={{ 
+              background: 'rgba(255, 255, 255, 0.05)', 
+              border: '1px solid rgba(255, 255, 255, 0.08)', 
+              color: '#fff', 
+              padding: '6px', 
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </button>
+        </div>
+      </div>
+
+      <canvas
+        ref={canvasRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        style={{ cursor: draggedNode ? 'grabbing' : (hoveredNode ? 'pointer' : 'grab'), display: 'block', width: '100%', height: 'calc(100% - 45px)' }}
+      />
+      
+      {hoveredNode && (
+        <div 
+          className="tooltip"
+          style={{ 
+            bottom: '16px', 
+            left: '16px',
+            borderLeft: `4px solid ${
+              hoveredNode.type === 'url' ? '#eab308' : hoveredNode.type === 'file' ? '#06b6d4' : hoveredNode.type === 'task' ? '#10b981' : '#a855f7'
+            }`
+          }}
+        >
+          <strong>{hoveredNode.title}</strong>
+          <div style={{ color: '#94a3b8', fontSize: '10px', marginTop: '2px' }}>
+            Click node to open context and edit
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
