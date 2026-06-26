@@ -13,7 +13,7 @@ export default function GraphView() {
   const [draggedNode, setDraggedNode] = useState(null);
   const [hoveredNode, setHoveredNode] = useState(null);
 
-  // Maintain local mutable physics positions so we don't cause React re-render loops
+  // Physics positions
   const nodesRef = useRef([]);
   const dragStart = useRef({ x: 0, y: 0 });
   const isPanning = useRef(false);
@@ -23,18 +23,15 @@ export default function GraphView() {
   useEffect(() => {
     const existingNodes = nodesRef.current;
     
-    // Build new nodes list keeping positions of old ones if they still exist
     nodesRef.current = notes.map(note => {
       const existing = existingNodes.find(n => n.id === note.id);
       if (existing) {
-        // Keep positions
         return {
           ...existing,
           title: note.title,
           type: note.type,
         };
       } else {
-        // Initialize position near center
         const width = canvasRef.current ? canvasRef.current.width : 600;
         const height = canvasRef.current ? canvasRef.current.height : 400;
         return {
@@ -60,18 +57,18 @@ export default function GraphView() {
 
     const updatePhysics = () => {
       const pNodes = nodesRef.current;
-      const kRepulsion = 400; // Repulsion force strength
-      const kAttraction = 0.04; // Spring attraction strength
-      const damping = 0.85; // Drag friction
-      const centerGravity = 0.015; // Pull nodes to center
-      const idealLength = 120; // Edge spring rest length
+      const kRepulsion = 400;
+      const kAttraction = 0.04;
+      const damping = 0.85;
+      const centerGravity = 0.015;
+      const idealLength = 120;
 
-      const width = canvas.width;
-      const height = canvas.height;
+      const width = canvas.width / (window.devicePixelRatio || 1);
+      const height = canvas.height / (window.devicePixelRatio || 1);
       const cx = width / 2;
       const cy = height / 2;
 
-      // 1. Repulsion between all node pairs
+      // 1. Repulsion force
       for (let i = 0; i < pNodes.length; i++) {
         const n1 = pNodes[i];
         for (let j = i + 1; j < pNodes.length; j++) {
@@ -98,7 +95,7 @@ export default function GraphView() {
         }
       }
 
-      // 2. Attraction along edges
+      // 2. Attraction force
       edges.forEach(edge => {
         const n1 = pNodes.find(n => n.id === edge.source);
         const n2 = pNodes.find(n => n.id === edge.target);
@@ -108,7 +105,6 @@ export default function GraphView() {
         const dy = n2.y - n1.y;
         const dist = Math.sqrt(dx * dx + dy * dy) || 0.1;
         
-        // Hooke's Law spring force
         const force = (dist - idealLength) * kAttraction * edge.weight;
         const fx = (dx / dist) * force;
         const fy = (dy / dist) * force;
@@ -123,11 +119,10 @@ export default function GraphView() {
         }
       });
 
-      // 3. Center gravity and update positions
+      // 3. Update physics bounds
       pNodes.forEach(node => {
         if (node === draggedNode) return;
 
-        // Pull to center
         node.vx += (cx - node.x) * centerGravity;
         node.vy += (cy - node.y) * centerGravity;
 
@@ -137,7 +132,6 @@ export default function GraphView() {
         node.vx *= damping;
         node.vy *= damping;
 
-        // Wall collisions
         const margin = 30;
         if (node.x < margin) { node.x = margin; node.vx = 0; }
         if (node.x > width - margin) { node.x = width - margin; node.vx = 0; }
@@ -147,14 +141,20 @@ export default function GraphView() {
     };
 
     const drawGraph = () => {
+      // Clear with ratio safety
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
       ctx.save();
-      // Apply pan & zoom
+      
+      // Scaling for high pixel density (Retina correction)
+      const dpr = window.devicePixelRatio || 1;
+      ctx.scale(dpr, dpr);
+      
+      // Apply translation & zoom
       ctx.translate(pan.x, pan.y);
       ctx.scale(zoom, zoom);
 
-      // Draw connection lines
+      // Draw Edges
       edges.forEach(edge => {
         const sourceNode = nodesRef.current.find(n => n.id === edge.source);
         const targetNode = nodesRef.current.find(n => n.id === edge.target);
@@ -175,7 +175,6 @@ export default function GraphView() {
         }
         ctx.stroke();
 
-        // Animated relationship signal particles
         if (isRelatedToSelected) {
           const time = Date.now() * 0.002;
           const ratio = (time % 1);
@@ -188,7 +187,7 @@ export default function GraphView() {
           ctx.shadowBlur = 8;
           ctx.shadowColor = '#06b6d4';
           ctx.fill();
-          ctx.shadowBlur = 0; // reset shadow
+          ctx.shadowBlur = 0;
         }
       });
 
@@ -201,20 +200,10 @@ export default function GraphView() {
         ctx.beginPath();
         ctx.arc(node.x, node.y, isSelected ? 20 : 15, 0, Math.PI * 2);
         
-        // Define colors based on node type
-        let primaryColor = '#a855f7'; // note
-        let glowColor = 'rgba(168, 85, 247, 0.5)';
-        
-        if (node.type === 'url') {
-          primaryColor = '#eab308'; // bookmark (yellow)
-          glowColor = 'rgba(234, 179, 8, 0.5)';
-        } else if (node.type === 'file') {
-          primaryColor = '#06b6d4'; // document file (cyan)
-          glowColor = 'rgba(6, 182, 212, 0.5)';
-        } else if (node.type === 'task') {
-          primaryColor = '#10b981'; // actionable task (green)
-          glowColor = 'rgba(16, 185, 129, 0.5)';
-        }
+        let primaryColor = '#a855f7';
+        if (node.type === 'url') primaryColor = '#eab308';
+        else if (node.type === 'file') primaryColor = '#06b6d4';
+        else if (node.type === 'task') primaryColor = '#10b981';
 
         ctx.shadowBlur = isSelected ? 20 : (isHovered ? 12 : 5);
         ctx.shadowColor = primaryColor;
@@ -224,9 +213,8 @@ export default function GraphView() {
         ctx.strokeStyle = isSelected ? '#ffffff' : primaryColor;
         ctx.lineWidth = isSelected ? 3 : 2;
         ctx.stroke();
-        ctx.shadowBlur = 0; // Reset shadow
+        ctx.shadowBlur = 0;
 
-        // Render type icon symbol inside note circles
         ctx.fillStyle = isSelected ? '#000000' : '#ffffff';
         ctx.font = '10px sans-serif';
         ctx.textAlign = 'center';
@@ -239,7 +227,6 @@ export default function GraphView() {
         
         ctx.fillText(label, node.x, node.y);
 
-        // Draw note titles below the nodes
         ctx.fillStyle = isSelected ? '#ffffff' : '#94a3b8';
         ctx.font = isSelected ? 'bold 11px system-ui' : '10px system-ui';
         ctx.fillText(
@@ -267,14 +254,23 @@ export default function GraphView() {
     };
   }, [edges, selectedNoteId, hoveredNode, zoom, pan, draggedNode]);
 
-  // Adjust canvas size
+  // Handle high resolution canvas resizing
   useEffect(() => {
     const handleResize = () => {
       const canvas = canvasRef.current;
       const container = containerRef.current;
       if (!canvas || !container) return;
-      canvas.width = container.clientWidth;
-      canvas.height = container.clientHeight;
+
+      const rect = container.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+
+      // Set visible dimensions matching container size
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height - 45}px`;
+
+      // Set actual pixel dimensions based on DPI
+      canvas.width = rect.width * dpr;
+      canvas.height = (rect.height - 45) * dpr;
     };
 
     handleResize();
@@ -282,67 +278,73 @@ export default function GraphView() {
     return () => window.removeEventListener('resize', handleResize);
   }, [isFullscreen]);
 
-  // Event handlers
-  const handleMouseDown = (e) => {
+  // Touch & Mouse Coordinate helpers for responsive targets
+  const getCoordinates = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left - pan.x) / zoom;
-    const mouseY = (e.clientY - rect.top - pan.y) / zoom;
+    const dpr = window.devicePixelRatio || 1;
+    
+    // Support mobile touch coordinates
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
+    const mouseX = (clientX - rect.left - pan.x) / zoom;
+    const mouseY = (clientY - rect.top - pan.y) / zoom;
+    return { x: mouseX, y: mouseY };
+  };
 
-    // Check if clicked a node
+  const handleStart = (e) => {
+    const { x, y } = getCoordinates(e);
+
     const clickedNode = nodesRef.current.find(node => {
-      const dx = node.x - mouseX;
-      const dy = node.y - mouseY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      return dist <= 25; // hit-target radius
+      const dx = node.x - x;
+      const dy = node.y - y;
+      return Math.sqrt(dx * dx + dy * dy) <= 25;
     });
 
     if (clickedNode) {
       setDraggedNode(clickedNode);
       setSelectedNoteId(clickedNode.id);
-      dragStart.current = { x: mouseX - clickedNode.x, y: mouseY - clickedNode.y };
+      dragStart.current = { x: x - clickedNode.x, y: y - clickedNode.y };
     } else {
       isPanning.current = true;
-      panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      panStart.current = { x: clientX - pan.x, y: clientY - pan.y };
     }
   };
 
-  const handleMouseMove = (e) => {
-    const rect = canvasRef.current.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left - pan.x) / zoom;
-    const mouseY = (e.clientY - rect.top - pan.y) / zoom;
+  const handleMove = (e) => {
+    const { x, y } = getCoordinates(e);
 
     if (draggedNode) {
-      draggedNode.x = mouseX - dragStart.current.x;
-      draggedNode.y = mouseY - dragStart.current.y;
+      draggedNode.x = x - dragStart.current.x;
+      draggedNode.y = y - dragStart.current.y;
       draggedNode.vx = 0;
       draggedNode.vy = 0;
     } else if (isPanning.current) {
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
       setPan({
-        x: e.clientX - panStart.current.x,
-        y: e.clientY - panStart.current.y
+        x: clientX - panStart.current.x,
+        y: clientY - panStart.current.y
       });
     } else {
-      // Find hovered node
       const hovered = nodesRef.current.find(node => {
-        const dx = node.x - mouseX;
-        const dy = node.y - mouseY;
+        const dx = node.x - x;
+        const dy = node.y - y;
         return Math.sqrt(dx * dx + dy * dy) <= 22;
       });
       setHoveredNode(hovered || null);
     }
   };
 
-  const handleMouseUp = () => {
+  const handleEnd = () => {
     setDraggedNode(null);
     isPanning.current = false;
   };
 
   const handleZoom = (factor) => {
     setZoom(prev => Math.max(0.5, Math.min(3, prev * factor)));
-  };
-
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
   };
 
   return (
@@ -353,7 +355,6 @@ export default function GraphView() {
         height: isFullscreen ? '100vh' : '100%', 
         width: isFullscreen ? '100vw' : '100%', 
         overflow: 'hidden',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
         position: 'relative'
       }}
     >
@@ -368,7 +369,7 @@ export default function GraphView() {
       >
         <div className="flex-row align-center gap-8">
           <Zap size={16} color="#a855f7" className="glow-purple" />
-          <span style={{ fontWeight: 600, fontSize: '14px', letterSpacing: '0.5px' }}>
+          <span style={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.5px' }}>
             EPISTEMIC KNOWLEDGE MAP
           </span>
         </div>
@@ -376,41 +377,19 @@ export default function GraphView() {
         <div className="flex-row gap-8">
           <button 
             onClick={() => handleZoom(1.15)}
-            className="flex-row align-center justify-between"
-            style={{ 
-              background: 'rgba(255, 255, 255, 0.05)', 
-              border: '1px solid rgba(255, 255, 255, 0.08)', 
-              color: '#fff', 
-              padding: '6px', 
-              borderRadius: '6px',
-              cursor: 'pointer'
-            }}
+            style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', color: '#fff', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}
           >
             <ZoomIn size={14} />
           </button>
           <button 
             onClick={() => handleZoom(0.85)}
-            style={{ 
-              background: 'rgba(255, 255, 255, 0.05)', 
-              border: '1px solid rgba(255, 255, 255, 0.08)', 
-              color: '#fff', 
-              padding: '6px', 
-              borderRadius: '6px',
-              cursor: 'pointer'
-            }}
+            style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', color: '#fff', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}
           >
             <ZoomOut size={14} />
           </button>
           <button 
-            onClick={toggleFullscreen}
-            style={{ 
-              background: 'rgba(255, 255, 255, 0.05)', 
-              border: '1px solid rgba(255, 255, 255, 0.08)', 
-              color: '#fff', 
-              padding: '6px', 
-              borderRadius: '6px',
-              cursor: 'pointer'
-            }}
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', color: '#fff', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}
           >
             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
@@ -419,10 +398,13 @@ export default function GraphView() {
 
       <canvas
         ref={canvasRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onMouseDown={handleStart}
+        onMouseMove={handleMove}
+        onMouseUp={handleEnd}
+        onMouseLeave={handleEnd}
+        onTouchStart={handleStart}
+        onTouchMove={handleMove}
+        onTouchEnd={handleEnd}
         style={{ cursor: draggedNode ? 'grabbing' : (hoveredNode ? 'pointer' : 'grab'), display: 'block', width: '100%', height: 'calc(100% - 45px)' }}
       />
       
@@ -438,9 +420,6 @@ export default function GraphView() {
           }}
         >
           <strong>{hoveredNode.title}</strong>
-          <div style={{ color: '#94a3b8', fontSize: '10px', marginTop: '2px' }}>
-            Click node to open context and edit
-          </div>
         </div>
       )}
     </div>

@@ -32,6 +32,9 @@
   padding: 0;
   box-sizing: border-box;
   overflow: hidden;
+  
+  /* Smooth touch scrolling */
+  -webkit-overflow-scrolling: touch;
 }
 
 * {
@@ -47,6 +50,7 @@ body {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
+  -webkit-text-size-adjust: 100%;
 }
 
 /* Scrollbar Customization */
@@ -69,6 +73,7 @@ body {
 .glass-panel {
   background: var(--bg-secondary);
   backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px); /* Safari support */
   border: 1px solid var(--border-color);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
@@ -211,6 +216,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .copilot-sidebar {
@@ -223,6 +232,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  -webkit-overflow-scrolling: touch;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .editor-container {
@@ -231,6 +243,8 @@ body {
   padding: 20px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(13, 17, 33, 0.5);
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 /* Flex utilities */
@@ -259,5 +273,10 @@ body {
     padding: 12px;
     border: none !important;
     border-radius: 0;
+  }
+
+  /* Force font-size >= 16px to prevent iOS Safari auto-zooming on input focus */
+  input, textarea, select, button {
+    font-size: 16px !important;
   }
 }
