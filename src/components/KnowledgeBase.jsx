@@ -39,7 +39,7 @@ export default function KnowledgeBase() {
   };
 
   return (
-    <div className="flex-col gap-16" style={{ width: '320px', borderRight: '1px solid rgba(255, 255, 255, 0.08)', padding: '16px', height: '100%', background: 'rgba(10, 12, 22, 0.4)' }}>
+    <div className="kb-sidebar">
       {/* Brand Header */}
       <div className="flex-row align-center justify-between" style={{ paddingBottom: '12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
         <div className="flex-row align-center gap-8">

@@ -124,11 +124,6 @@ body {
   100% { transform: translateY(0px); }
 }
 
-@keyframes scanline {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100%); }
-}
-
 /* Grid Overlay Background */
 .grid-bg {
   position: fixed;
@@ -188,10 +183,81 @@ body {
   color: #c084fc;
 }
 
+/* Responsive sidebars & panel structures */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.workspace-layout {
+  display: flex;
+  flex: 1;
+  flex-direction: row;
+  overflow: hidden;
+  width: 100%;
+}
+
+.kb-sidebar {
+  width: 320px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 16px;
+  height: 100%;
+  background: rgba(10, 12, 22, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.copilot-sidebar {
+  width: 380px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 16px;
+  height: 100%;
+  overflow-y: auto;
+  background: rgba(10, 12, 22, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.editor-container {
+  flex: 1.2;
+  height: 100%;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(13, 17, 33, 0.5);
+}
+
 /* Flex utilities */
 .flex-row { display: flex; flex-direction: row; }
 .flex-col { display: flex; flex-direction: column; }
 .align-center { align-items: center; }
 .justify-between { justify-content: space-between; }
 .gap-8 { gap: 8px; }
+.gap-12 { gap: 12px; }
 .gap-16 { gap: 16px; }
+
+/* Media query definitions for mobile devices */
+@media (max-width: 900px) {
+  .workspace-layout {
+    flex-direction: column;
+  }
+  
+  .kb-sidebar, .copilot-sidebar {
+    width: 100% !important;
+    border: none !important;
+    padding: 12px;
+    height: 100%;
+  }
+
+  .editor-container {
+    padding: 12px;
+    border: none !important;
+    border-radius: 0;
+  }
+}

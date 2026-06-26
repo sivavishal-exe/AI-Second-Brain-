@@ -51,7 +51,7 @@ export default function ContextPanel() {
   };
 
   return (
-    <div className="flex-col gap-16" style={{ width: '380px', borderLeft: '1px solid rgba(255, 255, 255, 0.08)', padding: '16px', height: '100%', overflowY: 'auto', background: 'rgba(10, 12, 22, 0.4)' }}>
+    <div className="copilot-sidebar">
       {/* AI Header */}
       <div className="flex-row align-center gap-8" style={{ paddingBottom: '12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
         <Cpu size={16} color="#06b6d4" className="glow-cyan" />

@@ -73,7 +73,7 @@ export default function NoteEditor() {
   }
 
   return (
-    <div className="flex-col glass-panel" style={{ flex: 1.2, height: '100%', padding: '20px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(13, 17, 33, 0.5)' }}>
+    <div className="flex-col glass-panel editor-container">
       {/* Editor Header */}
       <div className="flex-row justify-between align-center" style={{ marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="flex-row align-center gap-8">
