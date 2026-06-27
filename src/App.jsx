@@ -37,7 +37,7 @@ function DashboardAssembly() {
         <div className="flex-row align-center gap-8">
           <Sparkles size={16} color="#a855f7" className="glow-purple" />
           <span style={{ fontWeight: 800, fontSize: '14px', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-            AuraBrain OS
+            NovaBrain OS
           </span>
         </div>
 
@@ -326,7 +326,7 @@ function DashboardAssembly() {
       {/* Settings Tab */}
       {activeTab === 'settings' && (
         <div style={{ display: 'flex', flex: 1, flexDirection: 'column', padding: isMobile ? '16px' : '24px', overflowY: 'auto', gap: isMobile ? '16px' : '24px', maxWidth: '800px' }}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? '20px' : '24px', fontWeight: 600 }}>AuraBrain Engine Settings</h2>
+          <h2 style={{ margin: 0, fontSize: isMobile ? '20px' : '24px', fontWeight: 600 }}>NovaBrain Engine Settings</h2>
           
           <div className="glass-panel flex-col gap-16" style={{ padding: '20px' }}>
             <span style={{ fontSize: '13px', fontWeight: 600, color: '#a855f7' }}>GOOGLE GEMINI API INTEGRATION</span>

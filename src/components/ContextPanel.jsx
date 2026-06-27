@@ -14,7 +14,9 @@ export default function ContextPanel() {
     notes,
     generateAiSynthesis,
     isAiStreaming,
-    aiStreamResult
+    aiStreamResult,
+    agentStatus,
+    agentLogs
   } = useBrain();
 
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -56,6 +58,39 @@ export default function ContextPanel() {
       <div className="flex-row align-center gap-8" style={{ paddingBottom: '12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
         <Cpu size={16} color="#06b6d4" className="glow-cyan" />
         <span style={{ fontWeight: 700, fontSize: '14px', letterSpacing: '0.5px' }}>AI CO-PILOT WORKBENCH</span>
+      </div>
+
+      {/* Lemma Workspace Agent Sandbox Status */}
+      <div className="glass-card flex-col gap-4" style={{ padding: '10px', fontSize: '11px', border: '1px solid rgba(6, 182, 212, 0.15)' }}>
+        <div className="flex-row justify-between align-center">
+          <span style={{ color: '#06b6d4', fontWeight: 600 }}>Lemma Pod: aurabrain-epistemic-pod</span>
+          <span style={{ 
+            fontSize: '9px', 
+            padding: '2px 6px', 
+            borderRadius: '4px', 
+            background: agentStatus === 'running' ? 'rgba(234, 179, 8, 0.15)' : agentStatus === 'completed' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+            color: agentStatus === 'running' ? '#eab308' : agentStatus === 'completed' ? '#10b981' : '#94a3b8' 
+          }}>
+            Agent: {agentStatus.toUpperCase()}
+          </span>
+        </div>
+        {agentLogs.length > 0 && (
+          <div style={{ 
+            maxHeight: '60px', 
+            overflowY: 'auto', 
+            background: 'rgba(0, 0, 0, 0.3)', 
+            padding: '6px', 
+            borderRadius: '4px', 
+            fontFamily: 'monospace', 
+            fontSize: '9px',
+            color: '#94a3b8',
+            marginTop: '4px'
+          }}>
+            {agentLogs.map((log, index) => (
+              <div key={index}>{log}</div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Segment 1: AI Action Tasks */}

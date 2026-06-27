@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { supabase } from '../utils/supabaseClient';
+import { usePod, useTable, useAgent } from '../utils/lemmaSdk';
 
 const BrainContext = createContext();
 
@@ -7,8 +8,8 @@ const BrainContext = createContext();
 const initialNotes = [
   {
     id: 'n1',
-    title: 'AuraBrain Hackathon Pitch',
-    content: 'Goal: Pitch AuraBrain as an Autonomous Epistemic Engine. Differentiators:\n1. Continual passive context insertion based on user cursor position.\n2. Serendipity/Spaced-Repetition sidebar to resurface older notes.\n3. Automatic task extraction via Gemini models.\nEnsure graph visuals are striking during the live demo!',
+    title: 'Nova Brain Hackathon Pitch',
+    content: 'Goal: Pitch Nova Brain as an Autonomous Epistemic Engine. Differentiators:\n1. Continual passive context insertion based on user cursor position.\n2. Serendipity/Spaced-Repetition sidebar to resurface older notes.\n3. Automatic task extraction via Gemini models.\nEnsure graph visuals are striking during the live demo!',
     type: 'note',
     tags: ['hackathon', 'pitch', 'strategy'],
     createdAt: new Date(Date.now() - 3600000 * 24 * 5).toISOString(),
@@ -53,6 +54,10 @@ export function BrainProvider({ children }) {
   const [activeTab, setActiveTab] = useState('notes');
   const [isAiStreaming, setIsAiStreaming] = useState(false);
   const [aiStreamResult, setAiStreamResult] = useState('');
+  
+  // Lemma Integration
+  const { pod } = usePod("aurabrain-epistemic-pod");
+  const { runAgent, agentStatus, agentLogs } = useAgent(pod, "Auto-Wiring & Task Extractor Agent");
   
   const selectedNote = notes.find(n => n.id === selectedNoteId);
 
@@ -180,6 +185,9 @@ export function BrainProvider({ children }) {
     const defaultTitle = title || 'Untitled Concept';
     const defaultTags = tags.length > 0 ? tags : ['inbox'];
 
+    // Run Lemma SDK Background agent for auto-wiring & extraction
+    runAgent({ title: defaultTitle, content, action: 'create' });
+
     if (supabase) {
       const { data, error } = await supabase
         .from('nodes')
@@ -224,6 +232,10 @@ export function BrainProvider({ children }) {
   const updateNote = async (id, fields) => {
     // Optimistic UI updates
     setNotes(prev => prev.map(n => (n.id === id ? { ...n, ...fields, updatedAt: new Date().toISOString() } : n)));
+
+    if (fields.content || fields.title) {
+      runAgent({ noteId: id, ...fields, action: 'update' });
+    }
 
     if (supabase) {
       // Don't send fields if they are client specific (like id map formatting)
@@ -377,7 +389,7 @@ export function BrainProvider({ children }) {
     
     let text = '';
     if (type === 'draft') {
-      text = `## AI Generated Draft Spec: Project Synergy\n\n### Overview\nBased on your selected inputs: [${titleString}], AuraBrain has compiled a comprehensive project proposal drafts. This draft integrates user research and architectural goals.\n\n### 1. Unified Value Proposition\nBy feeding contextually relevant notes directly into the workflow, AuraBrain solves the "information graveyard" problem, boosting developer retention by 42%.\n\n### 2. Implementation Roadmap\n- Deploy local vector embeddings using Tensorflow.js/WASM.\n- Map real-time cursor updates to database queries.\n- Connect client-side Canvas visualizer with D3 forces.\n\n### 3. Immediate Action items\n- Finalize the presentation deck.\n- Deploy mock client to Vercel for judge preview.`;
+      text = `## AI Generated Draft Spec: Project Synergy\n\n### Overview\nBased on your selected inputs: [${titleString}], Nova Brain has compiled a comprehensive project proposal drafts. This draft integrates user research and architectural goals.\n\n### 1. Unified Value Proposition\nBy feeding contextually relevant notes directly into the workflow, Nova Brain solves the "information graveyard" problem, boosting developer retention by 42%.\n\n### 2. Implementation Roadmap\n- Deploy local vector embeddings using Tensorflow.js/WASM.\n- Map real-time cursor updates to database queries.\n- Connect client-side Canvas visualizer with D3 forces.\n\n### 3. Immediate Action items\n- Finalize the presentation deck.\n- Deploy mock client to Vercel for judge preview.`;
     } else if (type === 'tasks') {
       text = `### Extracted AI Tasks:\n\n[ ] Design glowing glassmorphism sidebar (High Priority)\n[ ] Setup Gemini 1.5 Flash endpoint mapping (Medium Priority)\n[ ] Benchmark pgvector cosine similarity indices (Medium Priority)\n[ ] Clean up older user feedback items (Low Priority)`;
     } else {
@@ -418,7 +430,9 @@ export function BrainProvider({ children }) {
       getSemanticMatches,
       getRelatedNotes,
       getForgottenContext,
-      generateAiSynthesis
+      generateAiSynthesis,
+      agentStatus,
+      agentLogs
     }}>
       {children}
     </BrainContext.Provider>

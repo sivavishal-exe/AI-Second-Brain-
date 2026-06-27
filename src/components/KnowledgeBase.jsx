@@ -45,7 +45,7 @@ export default function KnowledgeBase() {
         <div className="flex-row align-center gap-8">
           <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'linear-gradient(135deg, #a855f7, #06b6d4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '16px' }}>Ω</div>
           <span style={{ fontWeight: 700, fontSize: '18px', background: 'linear-gradient(90deg, #fff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            AuraBrain AI
+            Nova Brain AI
           </span>
         </div>
         <span style={{ fontSize: '10px', background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#c084fc', padding: '2px 6px', borderRadius: '12px', fontWeight: 600 }}>
