@@ -56,6 +56,20 @@ export function BrainProvider({ children }) {
   const [isAiStreaming, setIsAiStreaming] = useState(false);
   const [aiStreamResult, setAiStreamResult] = useState('');
   const [activeAlarms, setActiveAlarms] = useState([]);
+  const [theme, setTheme] = useState(localStorage.getItem('aurabrain_theme') || 'dark');
+
+  useEffect(() => {
+    if (theme === 'light') {
+      document.documentElement.classList.add('light-theme');
+    } else {
+      document.documentElement.classList.remove('light-theme');
+    }
+    localStorage.setItem('aurabrain_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
 
   // Settings State
   const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY || '');
@@ -708,7 +722,9 @@ Do not include any conversational intro or outro text.`;
       activeAlarms,
       dismissAlarm,
       snoozeAlarm,
-      requestNotificationPermission
+      requestNotificationPermission,
+      theme,
+      toggleTheme
     }}>
       {children}
     </BrainContext.Provider>

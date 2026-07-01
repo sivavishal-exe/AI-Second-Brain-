@@ -3,7 +3,7 @@ import { useBrain } from '../context/BrainContext';
 import { Maximize2, Minimize2, ZoomIn, ZoomOut, Zap } from 'lucide-react';
 
 export default function GraphView() {
-  const { notes, edges, selectedNoteId, setSelectedNoteId } = useBrain();
+  const { notes, edges, selectedNoteId, setSelectedNoteId, theme } = useBrain();
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   
@@ -227,7 +227,7 @@ export default function GraphView() {
         
         ctx.fillText(label, node.x, node.y);
 
-        ctx.fillStyle = isSelected ? '#ffffff' : '#94a3b8';
+        ctx.fillStyle = isSelected ? (theme === 'light' ? '#0f172a' : '#ffffff') : (theme === 'light' ? '#475569' : '#94a3b8');
         ctx.font = isSelected ? 'bold 11px system-ui' : '10px system-ui';
         ctx.fillText(
           node.title.length > 15 ? node.title.substring(0, 15) + '...' : node.title,
@@ -252,7 +252,7 @@ export default function GraphView() {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [edges, selectedNoteId, hoveredNode, zoom, pan, draggedNode]);
+  }, [edges, selectedNoteId, hoveredNode, zoom, pan, draggedNode, theme]);
 
   // Handle high resolution canvas resizing
   useEffect(() => {

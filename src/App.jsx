@@ -4,7 +4,7 @@ import KnowledgeBase from './components/KnowledgeBase';
 import GraphView from './components/GraphView';
 import NoteEditor from './components/NoteEditor';
 import ContextPanel from './components/ContextPanel';
-import { Cpu, Database, BarChart3, Settings, ShieldAlert, Sparkles, Network, List, FileText } from 'lucide-react';
+import { Cpu, Database, BarChart3, Settings, ShieldAlert, Sparkles, Network, List, FileText, Sun, Moon } from 'lucide-react';
 
 function DashboardAssembly() {
   const { 
@@ -18,7 +18,9 @@ function DashboardAssembly() {
     saveSettings,
     activeAlarms,
     dismissAlarm,
-    snoozeAlarm
+    snoozeAlarm,
+    theme,
+    toggleTheme
   } = useBrain();
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
@@ -132,13 +134,36 @@ function DashboardAssembly() {
           </button>
         </div>
 
-        {/* Sync Indicator - hidden on small mobile to save space */}
-        {!isMobile && (
-          <div className="flex-row align-center gap-8" style={{ fontSize: '11px', color: '#10b981' }}>
-            <span style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 8px #10b981' }} />
-            <span>Local Engine Active</span>
-          </div>
-        )}
+        {/* Theme and Sync indicator wrapper */}
+        <div className="flex-row align-center gap-12">
+          <button
+            onClick={toggleTheme}
+            style={{
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              color: 'var(--color-text-primary)',
+              padding: '6px 10px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '11px',
+              fontWeight: 600,
+              transition: 'all 0.2s'
+            }}
+          >
+            {theme === 'dark' ? <Sun size={12} color="#facc15" /> : <Moon size={12} color="#6366f1" />}
+            <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
+          </button>
+
+          {!isMobile && (
+            <div className="flex-row align-center gap-8" style={{ fontSize: '11px', color: '#10b981' }}>
+              <span style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 8px #10b981' }} />
+              <span>Local Engine Active</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Main Assembly Layout */}
