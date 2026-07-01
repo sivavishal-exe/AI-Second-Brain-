@@ -7,9 +7,26 @@ import ContextPanel from './components/ContextPanel';
 import { Cpu, Database, BarChart3, Settings, ShieldAlert, Sparkles, Network, List, FileText } from 'lucide-react';
 
 function DashboardAssembly() {
-  const { activeTab, setActiveTab, notes, edges } = useBrain();
+  const { 
+    activeTab, 
+    setActiveTab, 
+    notes, 
+    edges,
+    geminiApiKey,
+    similarityThreshold,
+    forgottenDecayPeriod,
+    saveSettings,
+    activeAlarms,
+    dismissAlarm,
+    snoozeAlarm
+  } = useBrain();
+
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
   const [mobileTab, setMobileTab] = useState('graph'); // 'list' | 'graph' | 'editor' | 'copilot'
+  const [inputKey, setInputKey] = useState(geminiApiKey);
+  const [inputThreshold, setInputThreshold] = useState(similarityThreshold);
+  const [inputDecay, setInputDecay] = useState(forgottenDecayPeriod);
+  const [showSavedToast, setShowSavedToast] = useState(false);
 
   // Sync screen width resize updates
   useEffect(() => {
@@ -19,6 +36,19 @@ function DashboardAssembly() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Sync settings when loaded
+  useEffect(() => {
+    setInputKey(geminiApiKey);
+    setInputThreshold(similarityThreshold);
+    setInputDecay(forgottenDecayPeriod);
+  }, [geminiApiKey, similarityThreshold, forgottenDecayPeriod]);
+
+  const handleSave = () => {
+    saveSettings(inputKey, inputThreshold, inputDecay);
+    setShowSavedToast(true);
+    setTimeout(() => setShowSavedToast(false), 3000);
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', position: 'relative', zIndex: 1 }}>
@@ -336,6 +366,8 @@ function DashboardAssembly() {
               <input 
                 type="password" 
                 placeholder="AIzaSy..." 
+                value={inputKey}
+                onChange={e => setInputKey(e.target.value)}
                 style={{
                   background: 'rgba(0,0,0,0.3)',
                   border: '1px solid rgba(255,255,255,0.08)',
@@ -348,7 +380,7 @@ function DashboardAssembly() {
                 }}
               />
               <span style={{ fontSize: '10px', color: '#64748b' }}>
-                Provide your API key to activate production summaries. Fallback simulations are running locally using a high-fidelity template parser.
+                {geminiApiKey ? '✅ Gemini API Key is active.' : 'Provide your API key to activate production summaries. Fallback simulations are running locally using a high-fidelity template parser.'}
               </span>
             </div>
           </div>
@@ -358,12 +390,28 @@ function DashboardAssembly() {
             
             <div className="flex-row gap-16" style={{ flexWrap: 'wrap' }}>
               <div className="flex-col gap-8" style={{ flex: 1, minWidth: '150px' }}>
-                <label style={{ fontSize: '11px', color: '#94a3b8' }}>Similarity Threshold (Cosine):</label>
-                <input type="range" min="0" max="1" step="0.05" defaultValue="0.65" style={{ accentColor: '#06b6d4' }} />
+                <div className="flex-row justify-between align-center">
+                  <label style={{ fontSize: '11px', color: '#94a3b8' }}>Similarity Threshold (Cosine):</label>
+                  <span style={{ fontSize: '10px', color: '#06b6d4', fontFamily: 'monospace' }}>{inputThreshold}</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="1" 
+                  step="0.05" 
+                  value={inputThreshold}
+                  onChange={e => setInputThreshold(parseFloat(e.target.value))}
+                  style={{ accentColor: '#06b6d4', width: '100%' }} 
+                />
               </div>
               <div className="flex-col gap-8" style={{ flex: 1, minWidth: '150px' }}>
-                <label style={{ fontSize: '11px', color: '#94a3b8' }}>Forgotten Context Decay Period:</label>
-                <input type="number" defaultValue="15" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', padding: '6px', borderRadius: '6px', color: '#fff', fontSize: '12px' }} />
+                <label style={{ fontSize: '11px', color: '#94a3b8' }}>Forgotten Context Decay Period (Days):</label>
+                <input 
+                  type="number" 
+                  value={inputDecay}
+                  onChange={e => setInputDecay(parseInt(e.target.value) || 0)}
+                  style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', padding: '6px', borderRadius: '6px', color: '#fff', fontSize: '12px' }} 
+                />
               </div>
             </div>
           </div>
@@ -380,10 +428,155 @@ function DashboardAssembly() {
                 fontWeight: 600,
                 cursor: 'pointer'
               }}
-              onClick={() => alert('Settings Saved (Mocked)')}
+              onClick={handleSave}
             >
               Save Configuration
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Success Notification Alert */}
+      {showSavedToast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          background: 'rgba(16, 185, 129, 0.15)',
+          border: '1px solid rgba(16, 185, 129, 0.4)',
+          borderRadius: '8px',
+          padding: '12px 20px',
+          color: '#10b981',
+          fontSize: '12px',
+          fontWeight: 600,
+          backdropFilter: 'blur(10px)',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3), 0 0 10px rgba(16, 185, 129, 0.2)',
+          zIndex: 9999,
+          pointerEvents: 'none'
+        }}>
+          Configuration saved successfully!
+        </div>
+      )}
+
+      {/* Alarm Modal Notification Overlay */}
+      {activeAlarms && activeAlarms.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(5, 7, 16, 0.8)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 99999,
+          padding: '20px'
+        }}>
+          <div className="glass-panel glow-purple" style={{
+            maxWidth: '480px',
+            width: '100%',
+            padding: '24px',
+            background: 'rgba(15, 18, 36, 0.95)',
+            border: '1px solid rgba(168, 85, 247, 0.4)',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(168, 85, 247, 0.15)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            textAlign: 'center',
+            animation: 'float 4s ease-in-out infinite'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
+              <div style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                background: 'rgba(168, 85, 247, 0.1)',
+                border: '1px solid rgba(168, 85, 247, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Sparkles className="shake-bell" size={32} color="#c084fc" />
+              </div>
+            </div>
+
+            <div className="flex-col gap-4">
+              <span style={{ fontSize: '11px', color: '#a855f7', fontWeight: 800, letterSpacing: '1px', textTransform: 'uppercase' }}>
+                🔔 Memo Alarm Triggered
+              </span>
+              <h3 style={{ margin: '8px 0', fontSize: '18px', fontWeight: 700, color: '#fff' }}>
+                {activeAlarms[0].title}
+              </h3>
+              <p style={{
+                fontSize: '13px',
+                color: '#94a3b8',
+                background: 'rgba(0,0,0,0.3)',
+                padding: '12px',
+                borderRadius: '8px',
+                border: '1px solid rgba(255,255,255,0.03)',
+                maxHeight: '120px',
+                overflowY: 'auto',
+                textAlign: 'left',
+                lineHeight: '1.5',
+                whiteSpace: 'pre-wrap'
+              }}>
+                {activeAlarms[0].content}
+              </p>
+            </div>
+
+            <div className="flex-col gap-4" style={{ fontSize: '11px', color: '#64748b', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '12px' }}>
+              <div>
+                <strong>Trigger Time:</strong> {new Date().toLocaleTimeString()}
+              </div>
+              {activeAlarms[0].reminder?.time && (
+                <div>
+                  <strong>Scheduled Alarm:</strong> {new Date(activeAlarms[0].reminder.time).toLocaleString()}
+                </div>
+              )}
+            </div>
+
+            <div className="flex-row gap-12" style={{ marginTop: '8px' }}>
+              <button
+                onClick={() => snoozeAlarm(activeAlarms[0].id, 5)}
+                style={{
+                  flex: 1,
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: '#94a3b8',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+              >
+                Snooze 5m
+              </button>
+              <button
+                onClick={() => dismissAlarm(activeAlarms[0].id)}
+                style={{
+                  flex: 1,
+                  background: 'linear-gradient(135deg, #a855f7, #6366f1)',
+                  border: 'none',
+                  color: '#fff',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(168, 85, 247, 0.3)'
+                }}
+                onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.1)'}
+                onMouseLeave={e => e.currentTarget.style.filter = 'brightness(1.0)'}
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
         </div>
       )}

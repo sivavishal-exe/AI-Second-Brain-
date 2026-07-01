@@ -280,3 +280,21 @@ body {
     font-size: 16px !important;
   }
 }
+
+@keyframes ring {
+  0% { transform: rotate(0); }
+  5% { transform: rotate(15deg); }
+  10% { transform: rotate(-15deg); }
+  15% { transform: rotate(10deg); }
+  20% { transform: rotate(-10deg); }
+  25% { transform: rotate(5deg); }
+  30% { transform: rotate(-5deg); }
+  35% { transform: rotate(0); }
+  100% { transform: rotate(0); }
+}
+
+.shake-bell {
+  animation: ring 1.5s ease infinite;
+  transform-origin: 50% 0;
+  display: inline-block;
+}

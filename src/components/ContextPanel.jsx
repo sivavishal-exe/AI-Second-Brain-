@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useBrain } from '../context/BrainContext';
-import { Cpu, RefreshCw, Layers, CheckCircle2, ChevronRight, Wand2, FileSpreadsheet, ListChecks } from 'lucide-react';
+import { Cpu, RefreshCw, Layers, CheckCircle2, ChevronRight, Wand2, FileSpreadsheet, ListChecks, Sparkles } from 'lucide-react';
 
 export default function ContextPanel() {
   const { 
@@ -16,7 +16,9 @@ export default function ContextPanel() {
     isAiStreaming,
     aiStreamResult,
     agentStatus,
-    agentLogs
+    agentLogs,
+    isExtractingTasks,
+    extractTasksForNote
   } = useBrain();
 
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -99,9 +101,31 @@ export default function ContextPanel() {
           <span style={{ fontSize: '12px', fontWeight: 600, color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <ListChecks size={13} /> ACTIONABLE AUTO-TASKS
           </span>
-          <span style={{ fontSize: '9px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '1px 6px', borderRadius: '10px' }}>
-            {currentNoteTasks.filter(t => t.status === 'done').length}/{currentNoteTasks.length} Done
-          </span>
+          <div className="flex-row align-center gap-8">
+            <button
+              onClick={() => extractTasksForNote(selectedNote.id)}
+              disabled={isExtractingTasks}
+              style={{
+                background: 'rgba(168, 85, 247, 0.1)',
+                border: '1px solid rgba(168, 85, 247, 0.3)',
+                color: '#c084fc',
+                fontSize: '9px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '3px 6px',
+                borderRadius: '4px',
+                fontWeight: 600,
+                transition: 'all 0.2s'
+              }}
+            >
+              <Sparkles size={10} /> {isExtractingTasks ? 'Extracting...' : 'Auto-Extract'}
+            </button>
+            <span style={{ fontSize: '9px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '2px 6px', borderRadius: '10px' }}>
+              {currentNoteTasks.filter(t => t.status === 'done').length}/{currentNoteTasks.length} Done
+            </span>
+          </div>
         </div>
 
         <form onSubmit={handleAddTask} className="flex-row gap-8" style={{ marginTop: '4px' }}>

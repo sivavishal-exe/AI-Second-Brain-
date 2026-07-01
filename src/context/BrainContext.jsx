@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import { usePod, useTable, useAgent } from '../utils/lemmaSdk';
+import { generateGeminiContent } from '../utils/geminiClient';
 
 const BrainContext = createContext();
 
@@ -9,7 +10,7 @@ const initialNotes = [
   {
     id: 'n1',
     title: 'Nova Brain Hackathon Pitch',
-    content: 'Goal: Pitch Nova Brain as an Autonomous Epistemic Engine. Differentiators:\n1. Continual passive context insertion based on user cursor position.\n2. Serendipity/Spaced-Repetition sidebar to resurface older notes.\n3. Automatic task extraction via Gemini models.\nEnsure graph visuals are striking during the live demo!',
+    content: 'Goal: Pitch Nova Brain as an Autonomous Epistemic Engine. Differentiators:\n1. Continual passive context insertion based on user cursor position.\n2. Spaced-Repetition sidebar to resurface older notes.\n3. Automatic task extraction via Gemini models.\nEnsure graph visuals are striking during the live demo!',
     type: 'note',
     tags: ['hackathon', 'pitch', 'strategy'],
     createdAt: new Date(Date.now() - 3600000 * 24 * 5).toISOString(),
@@ -54,6 +55,13 @@ export function BrainProvider({ children }) {
   const [activeTab, setActiveTab] = useState('notes');
   const [isAiStreaming, setIsAiStreaming] = useState(false);
   const [aiStreamResult, setAiStreamResult] = useState('');
+  const [activeAlarms, setActiveAlarms] = useState([]);
+
+  // Settings State
+  const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY || '');
+  const [similarityThreshold, setSimilarityThreshold] = useState(parseFloat(localStorage.getItem('similarity_threshold')) || 0.65);
+  const [forgottenDecayPeriod, setForgottenDecayPeriod] = useState(parseInt(localStorage.getItem('forgotten_decay_period')) || 15);
+  const [isExtractingTasks, setIsExtractingTasks] = useState(false);
   
   // Lemma Integration
   const { pod } = usePod("aurabrain-epistemic-pod");
@@ -61,8 +69,156 @@ export function BrainProvider({ children }) {
   
   const selectedNote = notes.find(n => n.id === selectedNoteId);
 
+  // Storage and reminder helpers
+  const getRemindersFromStorage = () => {
+    try {
+      return JSON.parse(localStorage.getItem('aurabrain_reminders') || '{}');
+    } catch {
+      return {};
+    }
+  };
+
+  const saveReminderToStorage = (noteId, reminder) => {
+    try {
+      const current = getRemindersFromStorage();
+      if (reminder) {
+        current[noteId] = reminder;
+      } else {
+        delete current[noteId];
+      }
+      localStorage.setItem('aurabrain_reminders', JSON.stringify(current));
+    } catch (e) {
+      console.error('Failed to save reminder to localStorage', e);
+    }
+  };
+
+  const mergeReminders = (notesList) => {
+    const reminders = getRemindersFromStorage();
+    return notesList.map(n => ({
+      ...n,
+      reminder: reminders[n.id] || null
+    }));
+  };
+
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      await Notification.requestPermission();
+    }
+  };
+
+  const playAlarmSound = () => {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const now = ctx.currentTime;
+      
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(880, now);
+      osc1.frequency.exponentialRampToValueAtTime(1200, now + 0.15);
+      gain1.gain.setValueAtTime(0.15, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.30);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.30);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1320, now + 0.12);
+      osc2.frequency.exponentialRampToValueAtTime(1760, now + 0.30);
+      gain2.gain.setValueAtTime(0.15, now + 0.12);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.12);
+      osc2.stop(now + 0.45);
+    } catch (e) {
+      console.warn("AudioContext failed to start", e);
+    }
+  };
+
+  const dismissAlarm = (noteId) => {
+    setActiveAlarms(prev => prev.filter(a => a.id !== noteId));
+  };
+
+  const snoozeAlarm = (noteId, minutes = 5) => {
+    const snoozeTime = new Date(Date.now() + minutes * 60 * 1000).toISOString();
+    dismissAlarm(noteId);
+    updateNote(noteId, {
+      reminder: {
+        time: snoozeTime,
+        active: true,
+        triggered: false
+      }
+    });
+  };
+
+  // Alarm background checking hook
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      const triggered = [];
+
+      setNotes(prevNotes => {
+        let changed = false;
+        const nextNotes = prevNotes.map(note => {
+          if (note.reminder && note.reminder.active && !note.reminder.triggered) {
+            const reminderTime = new Date(note.reminder.time);
+            if (reminderTime <= now) {
+              triggered.push(note);
+              changed = true;
+              return {
+                ...note,
+                reminder: {
+                  ...note.reminder,
+                  triggered: true,
+                  active: false
+                }
+              };
+            }
+          }
+          return note;
+        });
+
+        if (changed) {
+          const storageReminders = getRemindersFromStorage();
+          triggered.forEach(note => {
+            storageReminders[note.id] = {
+              time: note.reminder.time,
+              triggered: true,
+              active: false
+            };
+          });
+          localStorage.setItem('aurabrain_reminders', JSON.stringify(storageReminders));
+          return nextNotes;
+        }
+        return prevNotes;
+      });
+
+      if (triggered.length > 0) {
+        triggered.forEach(note => {
+          playAlarmSound();
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification(`Nova Brain Reminder: ${note.title}`, {
+              body: note.content.substring(0, 120) + '...',
+              icon: '/favicon.svg'
+            });
+          }
+        });
+        setActiveAlarms(prev => [...prev, ...triggered]);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   // 1. Fetch data from Supabase on mount
   useEffect(() => {
+    setNotes(prev => mergeReminders(prev));
     if (!supabase) return;
 
     const fetchAllData = async () => {
@@ -231,7 +387,16 @@ export function BrainProvider({ children }) {
 
   const updateNote = async (id, fields) => {
     // Optimistic UI updates
-    setNotes(prev => prev.map(n => (n.id === id ? { ...n, ...fields, updatedAt: new Date().toISOString() } : n)));
+    setNotes(prev => prev.map(n => {
+      if (n.id === id) {
+        const updated = { ...n, ...fields, updatedAt: new Date().toISOString() };
+        if (fields.reminder !== undefined) {
+          saveReminderToStorage(id, fields.reminder);
+        }
+        return updated;
+      }
+      return n;
+    }));
 
     if (fields.content || fields.title) {
       runAgent({ noteId: id, ...fields, action: 'update' });
@@ -374,13 +539,22 @@ export function BrainProvider({ children }) {
   };
 
   const getForgottenContext = () => {
+    const decayMs = forgottenDecayPeriod * 24 * 60 * 60 * 1000;
+    const cutoffDate = new Date(Date.now() - decayMs);
+    
+    // Fallback: If no notes match the strict decay cutoff, return the 2 oldest ones so the UI is never blank
+    const olderNotes = notes.filter(n => n.id !== selectedNoteId && new Date(n.createdAt) < cutoffDate);
+    if (olderNotes.length > 0) {
+      return olderNotes.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).slice(0, 2);
+    }
+    
     return notes
       .filter(n => n.id !== selectedNoteId)
       .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
       .slice(0, 2);
   };
 
-  const generateAiSynthesis = (type, nodeIds) => {
+  const generateAiSynthesis = async (type, nodeIds) => {
     setIsAiStreaming(true);
     setAiStreamResult('');
     
@@ -388,12 +562,46 @@ export function BrainProvider({ children }) {
     const titleString = selectedList.map(n => n.title).join(', ');
     
     let text = '';
-    if (type === 'draft') {
-      text = `## AI Generated Draft Spec: Project Synergy\n\n### Overview\nBased on your selected inputs: [${titleString}], Nova Brain has compiled a comprehensive project proposal drafts. This draft integrates user research and architectural goals.\n\n### 1. Unified Value Proposition\nBy feeding contextually relevant notes directly into the workflow, Nova Brain solves the "information graveyard" problem, boosting developer retention by 42%.\n\n### 2. Implementation Roadmap\n- Deploy local vector embeddings using Tensorflow.js/WASM.\n- Map real-time cursor updates to database queries.\n- Connect client-side Canvas visualizer with D3 forces.\n\n### 3. Immediate Action items\n- Finalize the presentation deck.\n- Deploy mock client to Vercel for judge preview.`;
-    } else if (type === 'tasks') {
-      text = `### Extracted AI Tasks:\n\n[ ] Design glowing glassmorphism sidebar (High Priority)\n[ ] Setup Gemini 1.5 Flash endpoint mapping (Medium Priority)\n[ ] Benchmark pgvector cosine similarity indices (Medium Priority)\n[ ] Clean up older user feedback items (Low Priority)`;
+    if (geminiApiKey) {
+      let prompt = '';
+      let systemInstruction = 'You are AuraBrain AI, an autonomous epistemic co-pilot engine. Return professional, clear markdown. Be direct and avoid generic disclaimers.';
+      
+      if (type === 'draft') {
+        prompt = `Generate a comprehensive markdown project proposal draft spec based on these notes:\n\n` +
+          selectedList.map(n => `### Title: ${n.title}\nContent:\n${n.content}`).join('\n\n') +
+          `\n\nStructure the draft with:
+- Overview
+- Unified Value Proposition
+- Implementation Roadmap (including key architectural points)
+- Immediate next steps.`;
+      } else if (type === 'tasks') {
+        prompt = `Analyze the following notes and extract a list of actionable to-do tasks (checkboxes):\n\n` +
+          selectedList.map(n => `### Title: ${n.title}\nContent:\n${n.content}`).join('\n\n') +
+          `\n\nFormat the response strictly as a list of checkboxes:
+[ ] Task name (High Priority)
+[ ] Task name (Medium Priority)
+[ ] Task name (Low Priority)
+Do not write any introductory or concluding text.`;
+      } else {
+        prompt = `Synthesize a cognitive insight summary based on these notes. Highlight connections, potential bottlenecks, and recommendation:\n\n` +
+          selectedList.map(n => `### Title: ${n.title}\nContent:\n${n.content}`).join('\n\n') +
+          `\n\nKeep the output concise (around 4-5 sentences).`;
+      }
+
+      try {
+        text = await generateGeminiContent(geminiApiKey, prompt, systemInstruction);
+      } catch (err) {
+        text = `Error from Gemini: ${err.message}\n\nPlease check your API key in settings or try again.`;
+      }
     } else {
-      text = `### Cognitive Insight Summary:\n\nConnecting [${titleString}] reveals a direct correlation between vector search latency and layout responsiveness. Recommendation: Run embeddings creation in a dedicated Web Worker to maintain a smooth 60fps on the canvas graph visualizer.`;
+      // Mocked fallbacks if no API Key is provided
+      if (type === 'draft') {
+        text = `## AI Generated Draft Spec: Project Synergy\n\n### Overview\nBased on your selected inputs: [${titleString}], Nova Brain has compiled a comprehensive project proposal drafts. This draft integrates user research and architectural goals.\n\n### 1. Unified Value Proposition\nBy feeding contextually relevant notes directly into the workflow, Nova Brain solves the "information graveyard" problem, boosting developer retention by 42%.\n\n### 2. Implementation Roadmap\n- Deploy local vector embeddings using Tensorflow.js/WASM.\n- Map real-time cursor updates to database queries.\n- Connect client-side Canvas visualizer with D3 forces.\n\n### 3. Immediate Action items\n- Finalize the presentation deck.\n- Deploy mock client to Vercel for judge preview.`;
+      } else if (type === 'tasks') {
+        text = `### Extracted AI Tasks:\n\n[ ] Design glowing glassmorphism sidebar (High Priority)\n[ ] Setup Gemini 1.5 Flash endpoint mapping (Medium Priority)\n[ ] Benchmark pgvector cosine similarity indices (Medium Priority)\n[ ] Clean up older user feedback items (Low Priority)`;
+      } else {
+        text = `### Cognitive Insight Summary:\n\nConnecting [${titleString}] reveals a direct correlation between vector search latency and layout responsiveness. Recommendation: Run embeddings creation in a dedicated Web Worker to maintain a smooth 60fps on the canvas graph visualizer.`;
+      }
     }
 
     let i = 0;
@@ -404,7 +612,65 @@ export function BrainProvider({ children }) {
         clearInterval(interval);
         setIsAiStreaming(false);
       }
-    }, 15);
+    }, 10);
+  };
+
+  const extractTasksForNote = async (noteId) => {
+    const note = notes.find(n => n.id === noteId);
+    if (!note || !note.content) return;
+    setIsExtractingTasks(true);
+
+    try {
+      let text = '';
+      if (geminiApiKey) {
+        const prompt = `Analyze the following note and extract 3-5 specific, actionable to-do checklist tasks.
+Note Title: ${note.title}
+Note Content:
+${note.content}
+
+Format the response strictly as a list of bullet points or task checkboxes, with high, medium, or low priority specified in parentheses, e.g.:
+- Task description (High Priority)
+- Another task (Medium Priority)
+Do not include any conversational intro or outro text.`;
+        
+        text = await generateGeminiContent(geminiApiKey, prompt, 'Extract task list.');
+      } else {
+        // Fallback mock tasks
+        text = `- Design glowing glassmorphism sidebar (High Priority)\n- Setup Gemini 1.5 Flash endpoint mapping (Medium Priority)\n- Benchmark pgvector cosine similarity indices (Medium Priority)\n- Clean up older user feedback items (Low Priority)`;
+      }
+
+      // Parse text into tasks
+      const lines = text.split('\n');
+      for (const line of lines) {
+        const cleanLine = line.replace(/^[-*\d.\s\[\]x]*\s*/i, '').trim();
+        if (!cleanLine) continue;
+
+        let priority = 'medium';
+        if (/high/i.test(cleanLine)) {
+          priority = 'high';
+        } else if (/low/i.test(cleanLine)) {
+          priority = 'low';
+        }
+
+        const taskTitle = cleanLine.replace(/\((high|medium|low)\s+priority\)/i, '').trim();
+        if (taskTitle) {
+          await addTask(noteId, taskTitle, priority);
+        }
+      }
+    } catch (err) {
+      console.error('Error auto-extracting tasks:', err);
+    } finally {
+      setIsExtractingTasks(false);
+    }
+  };
+
+  const saveSettings = (apiKey, threshold, decay) => {
+    setGeminiApiKey(apiKey);
+    setSimilarityThreshold(threshold);
+    setForgottenDecayPeriod(decay);
+    localStorage.setItem('gemini_api_key', apiKey);
+    localStorage.setItem('similarity_threshold', threshold);
+    localStorage.setItem('forgotten_decay_period', decay);
   };
 
   return (
@@ -432,7 +698,17 @@ export function BrainProvider({ children }) {
       getForgottenContext,
       generateAiSynthesis,
       agentStatus,
-      agentLogs
+      agentLogs,
+      geminiApiKey,
+      similarityThreshold,
+      forgottenDecayPeriod,
+      isExtractingTasks,
+      extractTasksForNote,
+      saveSettings,
+      activeAlarms,
+      dismissAlarm,
+      snoozeAlarm,
+      requestNotificationPermission
     }}>
       {children}
     </BrainContext.Provider>

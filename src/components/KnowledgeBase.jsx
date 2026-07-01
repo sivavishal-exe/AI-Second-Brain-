@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useBrain } from '../context/BrainContext';
-import { Search, Plus, BookOpen, Link2, FileText, Database, PlusCircle } from 'lucide-react';
+import { Search, Plus, BookOpen, Link2, FileText, Database, PlusCircle, Bell } from 'lucide-react';
 
 export default function KnowledgeBase() {
   const { notes, selectedNoteId, setSelectedNoteId, createNote, searchQuery, setSearchQuery } = useBrain();
@@ -264,10 +264,13 @@ export default function KnowledgeBase() {
                 <div className="flex-row justify-between align-center" style={{ marginBottom: '4px' }}>
                   <div className="flex-row align-center gap-8">
                     {icon}
-                    <strong style={{ fontSize: '13px', color: isSelected ? '#fff' : '#e2e8f0', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
+                    <strong style={{ fontSize: '13px', color: isSelected ? '#fff' : '#e2e8f0', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
                       {note.title}
                     </strong>
                   </div>
+                  {note.reminder?.active && (
+                    <Bell size={11} color="#a855f7" className="glow-purple" style={{ animationDuration: '1.5s' }} />
+                  )}
                 </div>
 
                 <p style={{ fontSize: '11px', color: '#64748b', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '32px', margin: 0 }}>

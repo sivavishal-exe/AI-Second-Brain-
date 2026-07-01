@@ -1,12 +1,53 @@
 import React, { useState, useEffect } from 'react';
 import { useBrain } from '../context/BrainContext';
-import { Save, Trash2, Calendar, FileText, Globe, BookOpen } from 'lucide-react';
+import { Save, Trash2, Calendar, FileText, Globe, BookOpen, Bell } from 'lucide-react';
 
 export default function NoteEditor() {
-  const { selectedNote, updateNote, deleteNote } = useBrain();
+  const { selectedNote, updateNote, deleteNote, requestNotificationPermission } = useBrain();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tagsInput, setTagsInput] = useState('');
+
+  const getLocalDatetimeString = (isoString) => {
+    if (!isoString) return '';
+    try {
+      const date = new Date(isoString);
+      const tzOffset = date.getTimezoneOffset() * 60000;
+      return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
+    } catch {
+      return '';
+    }
+  };
+
+  const handleReminderTimeChange = (e) => {
+    const val = e.target.value;
+    if (!val) {
+      updateNote(selectedNote.id, { reminder: null });
+      return;
+    }
+    const dateObj = new Date(val);
+    updateNote(selectedNote.id, {
+      reminder: {
+        time: dateObj.toISOString(),
+        active: selectedNote.reminder ? selectedNote.reminder.active : true,
+        triggered: false
+      }
+    });
+    requestNotificationPermission();
+  };
+
+  const handleToggleReminder = () => {
+    const currentReminder = selectedNote.reminder;
+    if (!currentReminder || !currentReminder.time) return;
+    updateNote(selectedNote.id, {
+      reminder: {
+        ...currentReminder,
+        active: !currentReminder.active,
+        triggered: false
+      }
+    });
+    requestNotificationPermission();
+  };
 
   // Sync state with selected note
   useEffect(() => {
@@ -143,6 +184,59 @@ export default function NoteEditor() {
             outline: 'none'
           }}
         />
+      </div>
+
+      {/* Reminder Setting Section */}
+      <div 
+        className="flex-row align-center gap-12 glass-card" 
+        style={{ 
+          padding: '8px 12px', 
+          marginBottom: '16px', 
+          background: 'rgba(168, 85, 247, 0.03)', 
+          border: '1px solid rgba(168, 85, 247, 0.1)',
+          borderRadius: '8px',
+          flexWrap: 'wrap'
+        }}
+      >
+        <div className="flex-row align-center gap-8" style={{ color: '#c084fc', fontSize: '11px', fontWeight: 600 }}>
+          <Bell size={13} className={selectedNote.reminder?.active ? "glow-purple" : ""} />
+          <span>SET ALARM REMINDER:</span>
+        </div>
+        <input
+          type="datetime-local"
+          value={getLocalDatetimeString(selectedNote.reminder?.time)}
+          onChange={handleReminderTimeChange}
+          style={{
+            background: 'rgba(0,0,0,0.3)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            color: '#fff',
+            fontSize: '11px',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            outline: 'none'
+          }}
+        />
+        {selectedNote.reminder && (
+          <button
+            onClick={handleToggleReminder}
+            style={{
+              background: selectedNote.reminder.active ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+              border: `1px solid ${selectedNote.reminder.active ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+              color: selectedNote.reminder.active ? '#f87171' : '#10b981',
+              padding: '3px 8px',
+              borderRadius: '4px',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            {selectedNote.reminder.active ? 'Disable' : 'Enable'}
+          </button>
+        )}
+        {selectedNote.reminder?.triggered && (
+          <span style={{ fontSize: '10px', color: '#64748b' }}>🔔 Triggered</span>
+        )}
       </div>
 
       {/* Main Content Area */}
